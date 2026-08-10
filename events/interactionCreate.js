@@ -14,6 +14,7 @@ export default {
 
     if (interaction.isStringSelectMenu()) {
       const customId = interaction.customId;
+
       if (customId.startsWith("ranking_period:") || customId.startsWith("ranking_page:")) {
         const command = client.commands.get("ranking");
         if (command?.handleSelect) {
@@ -23,7 +24,33 @@ export default {
             console.error("Select menu error:", err);
           }
         }
+        return;
       }
+
+      if (customId.startsWith("mispersonajes_page:")) {
+        const command = client.commands.get("mis-personajes");
+        if (command?.handleSelect) {
+          try {
+            await command.handleSelect(interaction);
+          } catch (err) {
+            console.error("Select menu error:", err);
+          }
+        }
+        return;
+      }
+
+      if (customId.startsWith("obrasdisponibles_page")) {
+        const command = client.commands.get("obras-disponibles");
+        if (command?.handleSelect) {
+          try {
+            await command.handleSelect(interaction);
+          } catch (err) {
+            console.error("Select menu error:", err);
+          }
+        }
+        return;
+      }
+
       return;
     }
 

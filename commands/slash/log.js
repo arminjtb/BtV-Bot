@@ -542,7 +542,7 @@ module.exports = {
       mediaData: {
         contentId: id,
         contentImage: media?.contentImage || "",
-        contentTitleNative:  media?.title?.contentTitleNative  || (matched ? "" : id),
+        contentTitleNative:  media?.title?.contentTitleNative  || "",
         contentTitleEnglish: media?.title?.contentTitleEnglish || "",
         contentTitleRomaji:  media?.title?.contentTitleRomaji  || "",
         type: apiType

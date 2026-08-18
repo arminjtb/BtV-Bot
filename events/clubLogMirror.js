@@ -1,5 +1,6 @@
 import axios from "axios";
 import { EmbedBuilder } from "discord.js";
+import coImmersion from "../lib/coImmersion.js";
 
 const API_BASE = "https://nihongotracker.app/api";
 const CLUB_ID = "6951b8e3319c4aea0d5d2b2d";
@@ -58,7 +59,7 @@ function addStat(fields, name, value, formatter = formatNumber) {
   fields.push({ name, value: formatter(value), inline: true });
 }
 
-function buildLogEmbed(activity) {
+function buildLogEmbed(activity, others = []) {
   const details = activity.details ?? {};
   const metadata = activity.metadata ?? {};
   const media = details.media ?? {};
@@ -95,6 +96,9 @@ function buildLogEmbed(activity) {
   if (tags.length > 0) {
     fields.push({ name: "🏷️ Etiquetas", value: tags.map(tag => `\`${tag}\``).join(" "), inline: false });
   }
+
+  const coField = coImmersion.buildCoImmersionField(others, apiType);
+  if (coField) fields.push(coField);
 
   const embed = new EmbedBuilder()
     .setColor(TYPE_COLORS[apiType] ?? 0x5865F2)
@@ -265,7 +269,27 @@ async function mirrorClubLogs(client) {
     });
     const enrichedLog = { ...log, details };
 
-    await channel.send({ embeds: [buildLogEmbed(enrichedLog)] });
+    // No se registra sighting de logs privados: evita filtrar por otra vía actividad que la
+    // persona pidió mantener oculta al marcar el log como privado.
+    const mediaInfo = details && !details.private ? coImmersion.extractMediaInfo(details) : null;
+    const username = log.user?.username;
+
+    let others = [];
+    if (mediaInfo && username) {
+      await coImmersion.recordSighting(db, {
+        ...mediaInfo,
+        username,
+        loggedAt: log.createdAt ? new Date(log.createdAt) : new Date()
+      }).catch(err => console.error("[clubLogMirror] Failed to record sighting:", err.message));
+
+      others = await coImmersion.getCoImmersors(db, {
+        type: mediaInfo.type,
+        contentId: mediaInfo.contentId,
+        excludeUsername: username
+      }).catch(() => []);
+    }
+
+    await channel.send({ embeds: [buildLogEmbed(enrichedLog, others)] });
     await rememberPostedLog(db, enrichedLog);
     processedIds.push(logId);
   }

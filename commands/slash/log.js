@@ -6,6 +6,7 @@ const {
   ButtonStyle
 } = require("discord.js");
 const axios = require("axios");
+const coImmersion = require("../../lib/coImmersion.js");
 
 const API_BASE = "https://nihongotracker.app/api";
 const CLUB_ID = "6951b8e3319c4aea0d5d2b2d";
@@ -148,9 +149,12 @@ function fuzzyScore(query, m) {
   return best;
 }
 
-function formatChoiceName(name) {
+function formatChoiceName(name, id) {
   const value = String(name || "Desconocido").trim() || "Desconocido";
-  return value.length <= 100 ? value : `${value.slice(0, 97)}...`;
+  const suffix = ` (${id})`;
+  const maxTitleLen = Math.max(0, 100 - suffix.length);
+  const title = value.length <= maxTitleLen ? value : `${value.slice(0, Math.max(0, maxTitleLen - 3))}...`;
+  return `${title}${suffix}`;
 }
 
 function isObjectId(value) {
@@ -254,7 +258,7 @@ async function getLinkedUsername(db, userDoc, discordId) {
   return username;
 }
 
-function buildEmbed({ media, apiType, mapped, description, tags, xp, isPrivate, user, matched, fallbackTitle }) {
+function buildEmbed({ media, apiType, mapped, description, tags, xp, isPrivate, user, matched, fallbackTitle, others }) {
   const title =
     media?.title?.contentTitleEnglish ||
     media?.title?.contentTitleRomaji ||
@@ -286,6 +290,9 @@ function buildEmbed({ media, apiType, mapped, description, tags, xp, isPrivate, 
     statsFields.push({ name: "✨ XP", value: `+${formatNumber(xp)}`, inline: true });
   if (tags.length > 0)
     statsFields.push({ name: "🏷️ Etiquetas", value: tags.map(t => `\`${t}\``).join(" "), inline: false });
+
+  const coField = coImmersion.buildCoImmersionField(others, apiType);
+  if (coField) statsFields.push(coField);
 
   const baseFooter = isPrivate ? "🔒 Log privado" : "nihongotracker.app";
   const footerText = matched ? baseFooter : `⚠️ Sin match en la base de datos · ${baseFooter}`;
@@ -413,7 +420,8 @@ module.exports = {
               m.title?.contentTitleEnglish ||
               m.title?.contentTitleRomaji ||
               m.title?.contentTitleNative ||
-              "Desconocido"
+              "Desconocido",
+              m.contentId
             ),
             value: String(m.contentId)
           }))
@@ -600,10 +608,32 @@ module.exports = {
             { $set: { nihongoUsername: inferredUsername } }
           );
         }
+
+        // No se registra sighting de logs privados: evita filtrar por otra vía actividad que la
+        // persona pidió mantener oculta al marcar el log como privado.
+        if (inferredUsername && !isPrivate) {
+          await coImmersion.recordSighting(interaction.client.db, {
+            type: apiType,
+            contentId: id,
+            username: inferredUsername,
+            title: resolvedDescription,
+            image: media?.contentImage || null,
+            loggedAt: new Date()
+          });
+        }
       } catch (err) {
         console.error("Failed to mark Discord-created log:", err.message);
       }
     }
+
+    // ================= CO-INMERSIÓN =================
+    const others = !isPrivate
+      ? await coImmersion.getCoImmersors(interaction.client.db, {
+          type: apiType,
+          contentId: id,
+          excludeUsername: nihongoUsername
+        }).catch(() => [])
+      : [];
 
     // ================= EMBED =================
     const xp = logResponse?.xp ?? 0;
@@ -618,7 +648,8 @@ module.exports = {
       isPrivate,
       user: interaction.user,
       matched,
-      fallbackTitle: id
+      fallbackTitle: id,
+      others
     });
 
     const components = logResponse?._id ? [buildDeleteButton(logResponse._id)] : [];

@@ -51,6 +51,18 @@ export default {
         return;
       }
 
+      if (customId.startsWith("obrasdelreto_page")) {
+        const command = client.commands.get("obras-del-reto");
+        if (command?.handleSelect) {
+          try {
+            await command.handleSelect(interaction);
+          } catch (err) {
+            console.error("Select menu error:", err);
+          }
+        }
+        return;
+      }
+
       return;
     }
 

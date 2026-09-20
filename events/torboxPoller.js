@@ -1,8 +1,15 @@
+import { setTimeout as sleep } from "node:timers/promises";
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from "discord.js";
 import torbox from "../lib/torbox.js";
 import torboxDownloads from "../lib/torboxDownloads.js";
 
 const POLL_MS = 7 * 1000;
+
+// Cuántas veces reintentar generar el link de descarga después de que TorBox marca algo como
+// "terminado", antes de darnos por vencidos. Con el poll cada 7s, más los reintentos inmediatos
+// dentro de cada intento, esto cubre poco más de un minuto — de sobra para el retraso típico
+// entre "download_finished" y que /requestdl funcione.
+const LINK_MAX_ATTEMPTS = 8;
 
 function toEmbed(data) {
   const embed = new EmbedBuilder()
@@ -44,11 +51,37 @@ async function refreshJobMessage(client, job) {
   }
 }
 
-async function finishJob(client, job, remote) {
+function requestLink(job, remote) {
+  const files = Array.isArray(remote.files) ? remote.files : [];
+  if (job.type === "web") {
+    return files.length > 1
+      ? torbox.requestWebDownloadLink({ webId: remote.id, zip: true })
+      : torbox.requestWebDownloadLink({ webId: remote.id, fileId: files[0]?.id });
+  }
+  return files.length > 1
+    ? torbox.requestDownloadLink({ torrentId: remote.id, zip: true })
+    : torbox.requestDownloadLink({ torrentId: remote.id, fileId: files[0]?.id });
+}
+
+// Pide una versión fresca del item individual en vez de confiar en el snapshot de /mylist que
+// disparó el "terminado" — justo al terminar, la lista completa a veces todavía no trae los
+// `files`, aunque el item individual ya los tenga.
+async function fetchFreshRemote(job, fallback) {
+  try {
+    const fresh = job.type === "web"
+      ? await torbox.getWebDownloadList({ id: fallback.id, bypassCache: true })
+      : await torbox.getTorrentList({ id: fallback.id, bypassCache: true });
+    return fresh || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+async function finalizeJob(client, job, downloadUrl, remote) {
   const db = client.db;
   const channel = await client.channels.fetch(job.channelId).catch(() => null);
 
-  // Borra el embed de "descargando" — el canal solo debe mostrar descargas activas.
+  // Borra el embed de "descargando/esperando link" — el canal solo debe mostrar descargas activas.
   if (channel && job.messageId) {
     const message = await channel.messages.fetch(job.messageId).catch(() => null);
     if (message) await message.delete().catch(() => {});
@@ -56,28 +89,55 @@ async function finishJob(client, job, remote) {
 
   const updatedJob = await torboxDownloads.updateJobFromRemote(db, job, remote);
 
-  let downloadUrl = null;
-  try {
-    const files = Array.isArray(remote.files) ? remote.files : [];
-    if (job.type === "web") {
-      downloadUrl = files.length > 1
-        ? await torbox.requestWebDownloadLink({ webId: remote.id, zip: true })
-        : await torbox.requestWebDownloadLink({ webId: remote.id, fileId: files[0]?.id });
-    } else {
-      downloadUrl = files.length > 1
-        ? await torbox.requestDownloadLink({ torrentId: remote.id, zip: true })
-        : await torbox.requestDownloadLink({ torrentId: remote.id, fileId: files[0]?.id });
-    }
-  } catch (err) {
-    console.error("[torboxPoller] Error pidiendo link de descarga:", err.message);
-  }
-
   if (channel) {
     const embed = toEmbed(torboxDownloads.buildFinishedEmbedData(updatedJob, downloadUrl));
     await channel.send({ content: `<@${job.userId}>`, embeds: [embed] }).catch(() => {});
   }
 
   await torboxDownloads.markDone(db, job._id, { downloadUrl });
+}
+
+// El "terminado" de TorBox a veces llega un poco antes de que el link de descarga esté listo
+// para generarse. En vez de rendirnos al primer fallo: dos intentos rápidos ahora mismo (con un
+// respiro corto entre ellos) y, si sigue sin poder, seguimos reintentando en los siguientes polls
+// (editando el embed para avisar) hasta LINK_MAX_ATTEMPTS antes de darnos por vencidos.
+async function tryFinalizeJob(client, job, remote) {
+  const attempt = (job.linkAttempts || 0) + 1;
+  const fresh = await fetchFreshRemote(job, remote);
+
+  let downloadUrl = null;
+  for (let i = 0; i < 2 && !downloadUrl; i++) {
+    try {
+      downloadUrl = await requestLink(job, fresh);
+    } catch (err) {
+      if (i === 0) {
+        await sleep(2000);
+      } else {
+        console.error("[torboxPoller] Error pidiendo link de descarga:", err.message);
+      }
+    }
+  }
+
+  if (downloadUrl) {
+    await finalizeJob(client, job, downloadUrl, fresh);
+    return;
+  }
+
+  if (attempt >= LINK_MAX_ATTEMPTS) {
+    await finalizeJob(client, job, null, fresh);
+    return;
+  }
+
+  await torboxDownloads.setLinkAttempts(client.db, job._id, attempt);
+
+  const channel = await client.channels.fetch(job.channelId).catch(() => null);
+  if (channel?.isTextBased() && job.messageId) {
+    const message = await channel.messages.fetch(job.messageId).catch(() => null);
+    if (message) {
+      const embed = toEmbed(torboxDownloads.buildLinkPendingEmbedData(job, attempt, LINK_MAX_ATTEMPTS));
+      await message.edit({ embeds: [embed], components: [] }).catch(() => {});
+    }
+  }
 }
 
 async function pollJobs(client) {
@@ -119,7 +179,7 @@ async function pollJobs(client) {
     if (!remote) continue; // todavía no aparece en /mylist (recién creado) — se resuelve solo
 
     if (torboxDownloads.isRemoteFinished(remote)) {
-      await finishJob(client, job, remote).catch(err =>
+      await tryFinalizeJob(client, job, remote).catch(err =>
         console.error("[torboxPoller] Error finalizando job:", err.message)
       );
       continue;

@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from "discord.js";
 import characters from "../../lib/characters.js";
+import ntToggle from "../../lib/nihongoTrackerToggle.js";
 
 // Canal fijo de pruebas — este comando NUNCA postea en el canal real de anuncios
 // (events/characterEvent.js usa otro ANNOUNCE_CHANNEL_ID, y este evento de prueba usa
@@ -117,6 +118,8 @@ async function pollOnce(client) {
     stopRunning(client);
     return;
   }
+
+  if (!ntToggle.isEnabled()) return; // NihongoTracker desactivado: el poll de prueba no usa la API
 
   let entries;
   try {

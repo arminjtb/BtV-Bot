@@ -7,6 +7,7 @@ const {
   PermissionFlagsBits,
 } = require("discord.js");
 const axios = require("axios");
+const ntToggle = require("../../lib/nihongoTrackerToggle.js");
 
 const CLUB_URL = "https://nihongotracker.app/clubs/6951b8e3319c4aea0d5d2b2d";
 
@@ -124,6 +125,9 @@ async function fetchVotings() {
 
 // ─── Sync mensajes en el canal ────────────────────────────────────────────────
 async function syncMessages(channel, votingMessages) {
+  // NihongoTracker desactivado: el poller sigue vivo pero no llama a la API.
+  if (!ntToggle.isEnabled()) return;
+
   let votings;
   try {
     votings = await fetchVotings();

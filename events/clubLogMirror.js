@@ -1,6 +1,7 @@
 import axios from "axios";
 import { EmbedBuilder } from "discord.js";
 import coImmersion from "../lib/coImmersion.js";
+import ntToggle from "../lib/nihongoTrackerToggle.js";
 
 const API_BASE = "https://nihongotracker.app/api";
 const CLUB_ID = "6951b8e3319c4aea0d5d2b2d";
@@ -226,6 +227,7 @@ async function updateSeenState(db, state, processedIds) {
 }
 
 async function mirrorClubLogs(client) {
+  if (!ntToggle.isEnabled()) return; // NihongoTracker desactivado: sin polling
   const db = client.db;
   if (!db) return;
 

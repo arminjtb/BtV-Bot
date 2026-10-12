@@ -1,5 +1,6 @@
 import { EmbedBuilder } from "discord.js";
 import characters from "../lib/characters.js";
+import ntToggle from "../lib/nihongoTrackerToggle.js";
 
 const POLL_MS = 60 * 1000;
 const ANNOUNCE_CHANNEL_ID = "1364570564320296971";
@@ -87,6 +88,9 @@ async function tick(client) {
       return;
     }
 
+    // NihongoTracker desactivado: el poller sigue vivo pero no revisa progreso (usa la API).
+    if (!ntToggle.isEnabled()) return;
+
     const winner = await characters.checkEventProgress(db, active);
     if (winner) {
       await characters.completeEvent(db, active, winner);
@@ -94,6 +98,8 @@ async function tick(client) {
     }
     return;
   }
+
+  if (!ntToggle.isEnabled()) return; // el sorteo puede refrescar el catálogo vía API
 
   const newEvent = await characters.rollDailyEvent(db);
   if (newEvent) {

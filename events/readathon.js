@@ -1,5 +1,6 @@
 import { EmbedBuilder } from "discord.js";
 import readathon from "../lib/readathon.js";
+import ntToggle from "../lib/nihongoTrackerToggle.js";
 
 const POLL_MS = 60 * 1000;
 const RANK_COLORS = [0xD4A72C, 0x94A3B8, 0xB7794A];
@@ -130,6 +131,8 @@ async function sendFinalResults(client, event) {
 }
 
 async function syncReadathons(client) {
+  if (!ntToggle.isEnabled()) return; // NihongoTracker desactivado: sin polling
+
   const events = await client.db.find({
     kind: "readathon",
     $or: [

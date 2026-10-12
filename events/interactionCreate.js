@@ -1,6 +1,24 @@
+import ntToggle from "../lib/nihongoTrackerToggle.js";
+
 export default {
   name: "interactionCreate",
   async execute(interaction, client) {
+    // Interruptor de NihongoTracker: si está apagado, se bloquea todo lo que usa su API.
+    if (!ntToggle.isEnabled()) {
+      if (interaction.isAutocomplete() && ntToggle.isApiCommand(interaction.commandName)) {
+        return interaction.respond([]).catch(() => {});
+      }
+      if (interaction.isChatInputCommand() && ntToggle.isApiCommand(interaction.commandName)) {
+        return interaction.reply({ content: ntToggle.DISABLED_MESSAGE, flags: 64 }).catch(() => {});
+      }
+      if (
+        (interaction.isButton() && ntToggle.isApiButton(interaction.customId)) ||
+        (interaction.isStringSelectMenu() && ntToggle.isApiSelect(interaction.customId))
+      ) {
+        return interaction.reply({ content: ntToggle.DISABLED_MESSAGE, flags: 64 }).catch(() => {});
+      }
+    }
+
     if (interaction.isAutocomplete()) {
       const command = client.commands.get(interaction.commandName);
       if (!command?.autocomplete) return;

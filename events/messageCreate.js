@@ -1,5 +1,6 @@
 const axios = require("axios");
 const { EmbedBuilder } = require("discord.js");
+const ntToggle = require("../lib/nihongoTrackerToggle.js");
 
 const getHeaders = (apiKey) => ({
   "X-API-Key": apiKey,
@@ -12,6 +13,7 @@ module.exports = {
   async execute(message, client) {
     if (message.author.bot) return;
     if (message.guild) return;
+    if (!ntToggle.isEnabled()) return; // NihongoTracker desactivado: no validar keys
 
     const pending = client.pendingLinks.get(message.author.id);
     if (!pending) return;

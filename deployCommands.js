@@ -8,6 +8,7 @@ dotenv.config();
 
 const TOKEN = process.env.BOT_TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
+const GUILD_ID = process.env.DISCORD_GUILD_ID;
 
 if (!TOKEN) throw new Error("Missing BOT_TOKEN");
 if (!CLIENT_ID) throw new Error("Missing CLIENT_ID");
@@ -43,9 +44,10 @@ console.log("\n🚀 Deploying...", commands.length);
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-const result = await rest.put(
-  Routes.applicationCommands(CLIENT_ID),
-  { body: commands }
-);
+const route = GUILD_ID
+  ? Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID)
+  : Routes.applicationCommands(CLIENT_ID);
 
-console.log("✅ Deployed:", result.length);
+const result = await rest.put(route, { body: commands });
+
+console.log(`✅ Deployed ${result.length} command(s)${GUILD_ID ? ` to guild ${GUILD_ID}` : " globally"}.`);

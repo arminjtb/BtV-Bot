@@ -28,8 +28,8 @@ client.pendingLinks = new Map();
 const mongoClient = new MongoClient(process.env.MONGODB_URI);
 await mongoClient.connect();
 
-const db = mongoClient.db("nihongotracker");
-client.db = db.collection("btv");
+const db = mongoClient.db(process.env.MONGODB_DB_NAME || "nihongotracker");
+client.db = db.collection(process.env.MONGODB_COLLECTION_NAME || "btv");
 
 console.log("Mongo connected");
 

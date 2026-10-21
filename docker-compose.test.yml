@@ -1,0 +1,27 @@
+services:
+  mongo-nukiyasu-test:
+    image: mongo:7
+    container_name: btvbot-nukiyasu-test-mongo
+    restart: "no"
+    volumes:
+      - btvbot_nukiyasu_test_mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand({ ping: 1 }).ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  btvbot-nukiyasu-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: btvbot-nukiyasu-test
+    restart: "no"
+    env_file:
+      - .env.test
+    depends_on:
+      mongo-nukiyasu-test:
+        condition: service_healthy
+
+volumes:
+  btvbot_nukiyasu_test_mongo_data:

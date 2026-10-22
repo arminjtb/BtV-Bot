@@ -15,7 +15,8 @@
   "scripts": {
     "start": "node index.js",
     "readathon": "node tools/readathon-cli.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test --test-isolation=none tests/nukiyasu.test.js",
+    "test:integration": "node --test --test-isolation=none tests/nukiyasu.mongo.test.js"
   },
   "keywords": [],
   "author": "",
